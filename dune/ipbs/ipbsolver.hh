@@ -155,6 +155,8 @@ class Ipbsolver
           for (typename Dune::QuadratureRule<DF,dim>::const_iterator 
                      q_it=rule.begin(); q_it!=rule.end(); ++q_it)
           {
+
+              std::vector<Dune::FieldVector<ctype,dim>>
             double E_ext_ions = 0.;
             // Get the position vector of the this element's center
             Dune::FieldVector<ctype,dim> r_prime = it->geometry().global(q_it->position());
@@ -441,6 +443,9 @@ class Ipbsolver
                 Dune::FieldVector<ctype, dim> center = ii->geometry().center();
 
                 ipbsPositions.push_back(center);
+                for (unsigned int i = 0; i<dim; i++)
+                    ipbsElementCorners.push_back(ii->geometry().corner(i));
+
                 ipbsNormals.push_back(ii->centerUnitOuterNormal());
                 indexLookupMap.insert(std::pair<int, int>(boundaryElemMapper.map(*it),counter));
                 ipbsType.push_back( physType );
@@ -512,24 +517,31 @@ class Ipbsolver
       ipbsType.resize(countBoundElems,0.);
       ipbsNormals.resize(countBoundElems,Dune::FieldVector<ctype,dim>(0.));
       ipbsPositions.resize(countBoundElems,Dune::FieldVector<ctype,dim>(0.));
+      std::vector<Dune::FieldVector<ctype,dim>> temp;
+      ipbsElementCorners.resize(dim*countBoundElems, Dune::FieldVector<ctype,dim>(0.));
   
       // for communicating position-vectors we temporally store into arrays
       int indexcounter; // Count how many position-vectors we already got
       double* all_positions = (double*) malloc(dim*countBoundElems*sizeof(double)); // allocate on all processors
       double* all_normals = (double*) malloc(dim*countBoundElems*sizeof(double)); // allocate on all processors
+      double* all_corners = (double*) malloc(dim*dim*countBoundElems*sizeof(double)); // allocate on all processors
       if( communicator.rank() !=0) // other nodes send their positions to master node
       {
         double* my_positions = (double*) malloc(dim*length_on_processor[communicator.rank()]*sizeof(double));
         double* my_normals = (double*) malloc(dim*length_on_processor[communicator.rank()]*sizeof(double));
+        double* my_corners = (double*) malloc(dim*dim*length_on_processor[communicator.rank()]*sizeof(double));
         for (unsigned int i = 0; i<length_on_processor[communicator.rank()]; i++){
           for (int j = 0; j<dim; j++)
           {
             my_positions[i*dim+j] = ipbsPositions.at(i).vec_access(j);
             my_normals[i*dim+j] = ipbsNormals.at(i).vec_access(j);
+            for (int k = 0; k<dim; k++)
+                my_corners[i*dim*dim+j*dim+k]=ipbsElementCorners[i*dim+j].vec_access(k);
           }
         }
         MPI_Send(my_positions,dim*length_on_processor[communicator.rank()],MPI_DOUBLE,0,0,MPI_COMM_WORLD); // pos sent on slot 0
         MPI_Send(my_normals,dim*length_on_processor[communicator.rank()],MPI_DOUBLE,0,1,MPI_COMM_WORLD); // normals sent on slot 1
+        MPI_Send(my_corners,dim*dim*length_on_processor[communicator.rank()],MPI_DOUBLE,0,1,MPI_COMM_WORLD); // normals sent on slot 1
       }
       else
       {   // Write positions of master node
@@ -546,6 +558,7 @@ class Ipbsolver
         for (int i = 1; i < communicator.size(); i++) {
           MPI_Recv(&all_positions[indexcounter],dim*length_on_processor[i],MPI_DOUBLE,i,0,MPI_COMM_WORLD,&status);
           MPI_Recv(&all_normals[indexcounter],dim*length_on_processor[i],MPI_DOUBLE,i,1,MPI_COMM_WORLD,&status);
+          MPI_Recv(&all_corners[indexcounter],dim*dim*length_on_processor[i],MPI_DOUBLE,i,1,MPI_COMM_WORLD,&status);
           indexcounter += dim*length_on_processor[i];
         }
       }
@@ -556,6 +569,8 @@ class Ipbsolver
         {
           ipbsNormals[i][j] = all_normals[i*dim+j];
           ipbsPositions[i][j] = all_positions[i*dim+j];
+          for (int k = 0; k<dim; k++)
+              ipbsElementCorners[i*dim+j][k]=all_corners[i*dim*dim+j*dim+k];
         }
       }
 
@@ -611,6 +626,7 @@ class Ipbsolver
 
     /// Store the center of boundary intersections of iterative type
     std::vector<Dune::FieldVector<ctype,dim> > ipbsPositions;
+    std::vector<Dune::FieldVector<ctype,dim> > ipbsElementCorners;
     /// Store the normal vector at the center of boundary intersections of iterative type
     std::vector<Dune::FieldVector<ctype,dim> > ipbsNormals;
     /// Store the volume of boundary intersections of iterative type
