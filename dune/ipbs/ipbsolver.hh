@@ -4,6 +4,7 @@
 #include <dune/grid/common/scsgmapper.hh> // Single Geometry Single Codim Mapper
 #include <dune/common/fvector.hh>
 #include <dune/geometry/quadraturerules.hh>
+#include <dune/geometry/genericgeometry/geometry.hh>
 
 #include "sysparams.hh"
 #include "boundary.hh"
@@ -156,7 +157,6 @@ class Ipbsolver
                      q_it=rule.begin(); q_it!=rule.end(); ++q_it)
           {
 
-              std::vector<Dune::FieldVector<ctype,dim>>
             double E_ext_ions = 0.;
             // Get the position vector of the this element's center
             Dune::FieldVector<ctype,dim> r_prime = it->geometry().global(q_it->position());
@@ -173,6 +173,21 @@ class Ipbsolver
             Dune::FieldVector<ctype, dim> unitNormal(ipbsNormals[i]);
             unitNormal *= -1.;
 
+            std::vector<Dune::FieldVector<ctype,dim>> corners;
+            for (int n=0; i<dim; i++) {
+                corners.push_back(ipbsElementCorners[dim*i+n]);
+            }
+
+//            typedef typename GV::IntersectionIterator IntersectionIterator;
+//            typedef typename IntersectionIterator::Intersection::Geometry IPBSELEMENTGEO;
+////            IPBSELEMENTGEO geo;
+//            typedef typename Dune::GenericGeometry::Geometry<dim-1, dim, typename GV::Grid> IPBSELEMENTGEO;
+//            IPBSELEMENTGEO geo(it->ileafbegin()->geometry());
+//            IPBSELEMENTGEO geo(it->ileafbegin()->geometry().type(), corners);
+
+            typedef typename GV::Grid::Traits::template Codim<1>::Geometry GEO;
+            GEO geo(corners);
+            
             Dune::FieldVector<ctype,dim> e_field(0.);
 
             e_field = E_field<Dune::FieldVector<ctype,dim> ,Dune::FieldVector<ctype,dim> > 
