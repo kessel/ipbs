@@ -138,6 +138,9 @@ class Ipbsolver
           efieldShift[i] = 0;
       }
 
+      std::vector<double> nearFieldCharge;
+      nearFieldCharge.resize(ipbsPositions.size(), 0.);
+
       // Loop over all elements and calculate the volume integral contribution
       for (LeafIterator it = gv.template begin<0,Dune::Interior_Partition>();
                	it!=gv.template end<0,Dune::Interior_Partition>(); ++it)
@@ -185,8 +188,15 @@ class Ipbsolver
 //            IPBSELEMENTGEO geo(it->ileafbegin()->geometry());
 //            IPBSELEMENTGEO geo(it->ileafbegin()->geometry().type(), corners);
 
-            typedef typename GV::Grid::Traits::template Codim<1>::Geometry GEO;
-            GEO geo(corners);
+//            typedef typename GV::Grid::Traits::template Codim<1>::Geometry GEO;
+//            GEO geo(corners);
+
+            Dune::FieldVector<ctype,dim> temp;
+//            for (int n=0; i<dim; i++) {
+//                temp += ipbsElementCorners[dim*i+n];
+//            }
+//            temp *= 1./dim;
+//            temp += ipbsPositions
             
             Dune::FieldVector<ctype,dim> e_field(0.);
 
@@ -205,13 +215,24 @@ class Ipbsolver
             switch (sysParams.get_salt())
             {
                 case 0:
-                    E_ext_ions *= -std::sinh(value);
+               //     E_ext_ions *= -std::sinh(value);
+                    E_ext_ions *= -0.0001*4*sysParams.pi*exp(-r_prime[0]);
                     break;
                 case 1:
                     E_ext_ions *= std::exp(value); // Counterions have opposite sign!
                     break;
             }
-            E_ext[i] += E_ext_ions;
+            temp = r - r_prime;
+            double scalar_dist =  (r - r_prime)*(r-r_prime);
+            double normal_dist =  (r - r_prime)*unitNormal;
+
+            double l = 0.5;
+            double d = 0.1;
+            if (normal_dist < d && scalar_dist - normal_dist*normal_dist < l*l)
+                nearFieldCharge[i] +=  -0.0001*4*sysParams.pi*exp(-r_prime[0])*weight;
+            else 
+                E_ext[i] += E_ext_ions;
+
             if (sysParams.get_symmetry() == 0)
               efieldShift[ ipbsType[i] ] -= E_ext_ions*ipbsVolumes[i];
             else
