@@ -162,7 +162,7 @@ class IpbsAnalysis
         DGF udgf(gfs,u);
       typedef typename DGF::Traits::RangeType RT;
 
-      double senergy = 0;
+      double energy = 0;
       
       for (LeafIterator it = gv.template begin<0,Dune::Interior_Partition>();
         it!=gv.template end<0,Dune::Interior_Partition>(); ++it) {
@@ -185,35 +185,45 @@ class IpbsAnalysis
                   grads.evaluate(*it, slocal, gradphi);
                   Dune::FieldVector<Real, dim> normal = ii->centerUnitOuterNormal();
 
-                  local_senergy = 1./4./sysParams.pi/sysParams.get_bjerrum()* (gradphi*normal) * svalue *ii->geometry().volume();
+                  local_senergy = 1./8./sysParams.pi/sysParams.get_bjerrum()* (gradphi*normal) * svalue *ii->geometry().volume();
 
-                  // Dirichlet
-//                  DUNE_THROW(Dune::NotImplemented,"Dirichlet boundaries are not yet supported for energy calculations"); 
-                  // 1/4/pi grad(phi) * n * phi
-                  // just implement :P
                 }
                 else if (boundary[ pgmap[ii->boundarySegmentIndex()] ]->get_type() == 1) { 
                   // Neumann
-                  local_senergy =  boundary[ pgmap[ii->boundarySegmentIndex()] ]
+                  local_senergy =  .5*boundary[ pgmap[ii->boundarySegmentIndex()] ]
                     ->get_charge_density() * svalue * ii->geometry().volume();
                 }
                 else if (boundary[ pgmap[ii->boundarySegmentIndex()] ]->get_type() == 2) { 
                   // IPBS
-                  local_senergy = ipbsolver.get_lcd(*ii) * svalue * ii->geometry().volume();
+                  local_senergy = .5*ipbsolver.get_lcd(*ii) * svalue * ii->geometry().volume();
                 }
                 
                 if (sysParams.get_symmetry() > 0) {
                   local_senergy *= 2. * sysParams.pi * sevalPos[1];
                 }
-                senergy += local_senergy;
+                energy += local_senergy;
             }
           }
         }
+        double local_energy;
+        RT value;
+        Dune::FieldVector<Real, dim> evalPos = it->geometry().center();
+        Dune::FieldVector<double,GFS::Traits::GridViewType::dimension> local =
+                  it->geometry().local(evalPos);
+        udgf.evaluate(*it, local, value);
+
+        local_energy = -(sysParams.get_lambda2i()/8./sysParams.pi/sysParams.get_bjerrum() ) // c_0
+                              * (-sinh(value)*value + 2*(cosh(value)-1) )*it->geometry().volume();
+        std::cout << "local energy " << local_energy << std::endl;
+        if (sysParams.get_symmetry() > 0) {
+          local_energy *= 2. * sysParams.pi * evalPos[1];
+        }
+        energy += local_energy;
 
       }
-      communicator.sum(&senergy,1);
+      communicator.sum(&energy,1);
       if (communicator.rank() == 0) {
-        en_file << senergy << std::endl;
+        en_file << energy << std::endl;
         en_file.close();
       }
     }
@@ -273,8 +283,8 @@ class IpbsAnalysis
           localminr=std::min(std::min(corner0[1], corner1[1]), corner2[1]);
           localmaxz=std::max(std::max(corner0[0], corner1[0]), corner2[0]);
           localmaxr=std::max(std::max(corner0[1], corner1[1]), corner2[1]);
-          int m0=(int)floor((localminz-minz)/res);
-          int n0=(int)floor((localminr-minr)/res);
+          int m0=(int)floor((localminz-minz)/res)+1;
+          int n0=(int)floor((localminr-minr)/res)+1;
 
           Real r,z;
           int m, n;
